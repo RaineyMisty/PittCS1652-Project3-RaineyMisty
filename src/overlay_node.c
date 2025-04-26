@@ -567,15 +567,26 @@ void init_client_sock(int client_port)
 
 }
 
-void heartbeat_callback(void *user_data)
+void heartbeat_callback(int uc, void *ud)
 {
     // Send heartbeat to all neighbors
     for (int i = 0; i < link_state_list_size; i++) {
         struct heartbeat_pkt pkt;
-        
+        u_int32_t neighbor_id = link_state_list[i].node_id;
         pkt.hdr.type = CTRL_HEARTBEAT;
         pkt.hdr.src_id = My_ID;
-        pkt.hdr.dst_id = link_state_list[i].node_id;
+        pkt.hdr.dst_id = neighbor_id;
+
+        struct sockaddr_in addr = Node_List.nodes[neighbor_id-1]->ctrl_addr; // init with 0!
+        sendto(Ctrl_Sock, &pkt, sizeof(pkt), 0, (struct sockaddr *)&addr,
+               sizeof(addr));
+        Alarm(DEBUG, "Sent heartbeat to %u\n", neighbor_id);
+
+    }
+
+    // Set up next heartbeat
+    sp_time heartbeat_interval = { .sec = HEARTBEAT_INTERVAL, .usec = 0 };
+    E_queue(heartbeat_callback, 0, NULL, heartbeat_interval);
 }
 
 void init_link_state(void)
@@ -610,7 +621,8 @@ void init_link_state(void)
     }
 
     // Set up heartbeat timer
-    E_queue(0, heartbeat_callback, NULL);
+    sp_time zero = { .sec = 0, .usec = 0 };
+    E_queue(heartbeat_callback, 0, NULL, zero);
 }
 
 void init_distance_vector(void)
