@@ -182,6 +182,17 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
            sizeof(addr)); // fine :D
 }
 
+void heartbeat_timeout_callback(int uc, void *ud)
+{
+    struct link_state *link = (struct link_state *)ud;
+    
+    Alarm(DEBUG, "Link %u is dead\n", link->node_id);
+
+    link->alive = false;
+
+    // Broadcast the link state update
+}
+
 /* Handle heartbeat echo. This indicates that the link is alive, so update our
  * link weights and send update if we previously thought this link was down.
  * Push forward timer for considering the link dead */
@@ -196,6 +207,27 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
     Alarm(DEBUG, "Got heartbeat_echo from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
+
+     // get the id from the packet
+    uint32_t id = pkt->hdr.src_id;
+    // find the link state in the list
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].node_id == id) {
+            // check if the link is alive
+            if (link_state_list[i].alive == false) {
+                // Broadcast the link state update
+                link_state_list[i].alive = true;
+            }
+            // reset the timeout timer
+            if (link_state_list[i].timeout_id != -1) {
+                E_detach_fd(link_state_list[i].timeout_id, 0);
+            }
+            sp_time timeout = { .sec = HEARTBEAT_TIMEOUT, .usec = 0 };
+            link_state_list[i].timeout_id =
+                E_queue(heartbeat_timeout_callback, 0, &link_state_list[i], timeout);
+            break;
+        }
+    }
 }
 
 /* Process received link state advertisement */
