@@ -28,7 +28,7 @@
 #include "node_list.h"
 #include "edge_list.h"
 
-#define PRINT_DEBUG 0
+#define PRINT_DEBUG 1
 
 #define MAX_CONF_LINE 1024
 
@@ -182,6 +182,39 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
            sizeof(addr)); // fine :D
 }
 
+/* Broadcast function to tell all others node about the link state
+ * Writen by Tingxu Chen */
+static void broadcast_link_state(void)
+{
+    // create a lsa packet
+    struct lsa_pkt pkt;
+    pkt.hdr.type = CTRL_LSA;
+    pkt.hdr.src_id = My_ID;
+
+    // fill in the link state
+    uint32_t count = 0;
+    for (int i = 0; i < Edge_List.num_edges; i++) {
+        if (Edge_List.edges[i]->src_id == My_ID) {
+            pkt.link_ids[count] = Edge_List.edges[i]->dst_id;
+            pkt.link_costs[count] = Edge_List.edges[i]->cost;
+        }
+    }
+    pkt.num_links = count;
+
+    // send the packet to all neighbors
+
+    for (int i = 0; i < link_state_list_size; i++) {
+        //dist
+        pkt.hdr.dst_id = link_state_list[i].node_id;
+        struct sockaddr_in addr = Node_List.nodes[link_state_list[i].node_id-1]->ctrl_addr; // init with 0!
+        sendto(Ctrl_Sock, &pkt, sizeof(pkt), 0, (struct sockaddr *)&addr,
+               sizeof(addr));
+        Alarm(DEBUG, "Sent lsa to %u\n", link_state_list[i].node_id);
+    }
+}
+
+/* Callback function for heartbeat timeout.
+ * Writen by Tingxu Chen */
 void heartbeat_timeout_callback(int uc, void *ud)
 {
     struct link_state *link = (struct link_state *)ud;

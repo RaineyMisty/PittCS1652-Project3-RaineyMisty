@@ -44,6 +44,9 @@ struct heartbeat_echo_pkt {
 struct lsa_pkt {
     struct ctrl_hdr hdr;
     /* you should define the fields needed here */
+    uint32_t num_links; /* number of links in the packet */
+    uint32_t link_ids[MAX_PATH]; /* array of links */
+    uint32_t link_costs[MAX_PATH]; /* array of costs */
 } __attribute__((packed));
 
 /* Distance vector update */
