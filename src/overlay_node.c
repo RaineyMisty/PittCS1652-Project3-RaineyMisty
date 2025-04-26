@@ -224,7 +224,7 @@ void heartbeat_timeout_callback(int uc, void *ud)
     link->alive = false;
 
     // Broadcast the link state update
-    Alarm(PRINT, "Link %u is dead\n", link->node_id);
+    Alarm(DEBUG, "Link %u is dead -- Broadcast to all\n", link->node_id);
     broadcast_link_state();
 }
 
@@ -252,7 +252,7 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
             if (link_state_list[i].alive == false) {
                 // Broadcast the link state update
                 link_state_list[i].alive = true;
-                Alarm(PRINT, "Link %u is alive\n", id);
+                Alarm(DEBUG, "Link %u is alive -- Broadcast to all\n", id);
                 broadcast_link_state();
             }
             // reset the timeout timer
