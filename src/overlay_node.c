@@ -1,7 +1,7 @@
 /*
  * CS 1652 Project 3 
  * (c) Amy Babay, 2022
- * (c) <Student names here>
+ * (c) Tingxu Chen, 2025
  * 
  * Computer Science Department
  * University of Pittsburgh
@@ -31,6 +31,20 @@
 #define PRINT_DEBUG 0
 
 #define MAX_CONF_LINE 1024
+
+#define HEARTBEAT_INTERVAL 1
+#define HEARTBEAT_TIMEOUT  10
+
+struct link_state
+{
+    /* data */
+    uint32_t node_id;    // ID of the neighbor node
+    bool     alive;      // true if the link is alive
+    int      timeout_id; // timer ID for the heartbeat timeout
+};
+
+static struct link_state *link_state_list = NULL;
+static int link_state_list_size = 0;
 
 enum mode {
     MODE_NONE,
@@ -553,9 +567,50 @@ void init_client_sock(int client_port)
 
 }
 
+void heartbeat_callback(void *user_data)
+{
+    // Send heartbeat to all neighbors
+    for (int i = 0; i < link_state_list_size; i++) {
+        struct heartbeat_pkt pkt;
+        
+        pkt.hdr.type = CTRL_HEARTBEAT;
+        pkt.hdr.src_id = My_ID;
+        pkt.hdr.dst_id = link_state_list[i].node_id;
+}
+
 void init_link_state(void)
 {
     Alarm(DEBUG, "init link state\n");
+
+    // Check node list is not empty
+    if (Node_List.num_nodes == 0) {
+        Alarm(EXIT, "overlay_node: error: no nodes in node list\n");
+    }
+    // Check edge list is not empty
+    if (Edge_List.num_edges == 0) {
+        Alarm(EXIT, "overlay_node: error: no edges in edge list\n");
+    }
+
+    // Allocate space for link state list
+    link_state_list_size = 0;
+    for (int i = 0; i < Edge_List.num_edges; i++) {
+        if (Edge_List.edges[i]->src_id == My_ID) {
+            link_state_list_size++;
+        }
+    }
+    link_state_list = calloc(link_state_list_size, sizeof(struct link_state));
+    int idx = 0;
+    for (int i = 0; i < Edge_List.num_edges; i++) {
+        if (Edge_List.edges[i]->src_id == My_ID) {
+            link_state_list[idx].node_id = Edge_List.edges[i]->dst_id;
+            link_state_list[idx].alive = true;
+            link_state_list[idx].timeout_id = -1;
+            idx++;
+        }
+    }
+
+    // Set up heartbeat timer
+    E_queue(0, heartbeat_callback, NULL);
 }
 
 void init_distance_vector(void)
