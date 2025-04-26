@@ -35,6 +35,12 @@
 #define HEARTBEAT_INTERVAL 1
 #define HEARTBEAT_TIMEOUT  10
 
+#define MAX_PATH 8
+#define MAX_COST 4294967295
+
+static int graph[MAX_PATH+1][MAX_PATH+1]; // graph[i][j] = cost from i to j
+static uint32_t forwarding_table[MAX_PATH+1]; // forwarding_table[i] = next hop to reach i
+
 struct link_state
 {
     /* data */
@@ -264,6 +270,69 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
                 E_queue(heartbeat_timeout_callback, 0, &link_state_list[i], timeout);
             break;
         }
+    }
+}
+
+/* Dijkstra process */
+static void dijkstra_forwarding(void)
+{
+    int n = Node_List.num_nodes;
+    int dist[MAX_PATH+1];
+    bool visited[MAX_PATH+1] = {false};
+    int next_hop[MAX_PATH+1];
+
+    // Initialize the distance and next hop arrays
+    for (int i = 1; i <= n; i++) {
+        dist[i] = graph[My_ID][i];
+        visited[i] = false;
+        next_hop[i] = (dist[i] == MAX_COST) ? 0 : My_ID;
+    }
+    dist[My_ID] = 0;
+    visited[My_ID] = true;
+    next_hop[My_ID] = My_ID;
+
+    // Dijkstra's algorithm
+    for (int k = 1; k < n; k++) {
+        int min_dist = MAX_COST;
+        int u = -1;
+
+        // Find the unvisited node with the smallest distance
+        for (int i = 1; i <= n; i++) {
+            if (!visited[i] && dist[i] < min_dist) {
+                min_dist = dist[i];
+                u = i;
+            }
+        }
+            
+        if (u == -1) {
+            break; // All remaining nodes are unreachable
+        }
+        visited[u] = true;
+        for (int v = 1; v <= n; v++) {
+            if (!visited[v] && graph[u][v] != MAX_COST) {
+                int new_dist = dist[u] + graph[u][v];
+                if (new_dist < dist[v]) {
+                    dist[v] = new_dist;
+                    // next_hop[v] = u;
+                    // Here we determine next_hop[v]:
+                    // - If u is the source (My_ID), it means v is our direct neighbor,
+                    // then the first hop is v itself;
+                    // - Otherwise, u is not the source, and we have recorded in next_hop[u]
+                    // "who is the first hop to u", so the first hop to v
+                    // should follow u's first hop:
+                    if (u == My_ID) {
+                        next_hop[v] = v;
+                    } else {
+                        next_hop[v] = next_hop[u];
+                    }
+                }
+            }
+        }
+    }
+    // Update the forwarding table
+    for (int i = 1; i <= n; i++) {
+        forwarding_table[i] = next_hop[i];
+        Alarm(DEBUG, "forwarding_table[%d] = %d in dist = %d\n", i, forwarding_table[i], dist[i]);
     }
 }
 
@@ -697,6 +766,17 @@ void init_link_state(void)
             link_state_list[idx].timeout_id = -1;
             idx++;
         }
+    }
+
+    // init graph
+    for (int u = 1; u <= Node_List.num_nodes; u++) {
+        for (int v = 1; v <= Node_List.num_nodes; v++) {
+            graph[u][v] = MAX_COST;
+        }
+    }
+    for (int i = 0; i < Edge_List.num_edges; i++) {
+        struct edge *e = Edge_List.edges[i];
+        graph[e->src_id][e->dst_id] = e->cost;
     }
 
     // Set up heartbeat timer
