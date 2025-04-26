@@ -170,6 +170,16 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
     Alarm(DEBUG, "Got heartbeat from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
+     
+     // Just create one and send back :)
+    struct heartbeat_echo_pkt echo_pkt;
+    echo_pkt.hdr.type = CTRL_HEARTBEAT_ECHO;
+    echo_pkt.hdr.src_id = My_ID;
+    echo_pkt.hdr.dst_id = pkt->hdr.src_id;
+
+    struct sockaddr_in addr = Node_List.nodes[pkt->hdr.src_id-1]->ctrl_addr; // init with 0!
+    sendto(Ctrl_Sock, &echo_pkt, sizeof(echo_pkt), 0, (struct sockaddr *)&addr,
+           sizeof(addr)); // fine :D
 }
 
 /* Handle heartbeat echo. This indicates that the link is alive, so update our
