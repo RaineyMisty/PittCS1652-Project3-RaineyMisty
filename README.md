@@ -30,6 +30,12 @@ I'll upload a new version tomorrow
 - Step 5: update local lsadb
 - Step 6: send it to all neighbors
 
+#### Flooding only when:
+
+1. ~~A node INIT~~
+2. A node see its neighbor awake
+3. A node see its neighbor dead
+
 ### Forwarding process
 
 ### Heartbeat process
@@ -39,7 +45,8 @@ I'll upload a new version tomorrow
   - The node are repeatedly sending heartbeat message to all neighbors
   - If receiving heartbeat echo message, that means the node is alive
     - This case means, if this node is dead before, then it means it start.
-    - But this case we don't need to flooding, because a new started node will send lsa packet to flooding
+    - ~~But this case we don't need to flooding, because a new started node will send lsa packet to flooding~~
+    - The neighbor need to tell the world, that its neighbor is awake!
   - If one neighbor died, then we need to flooding
     - All the neighbors of the dead node will start to flooding
     1. This node will delete the edge to the dead node
@@ -79,9 +86,12 @@ I'll upload a new version tomorrow
 - Step1: Send back ack
 - Step2: Check the sequence number
 - Step3: Update the LSA database
+  - Update this lsadb for the origin node
+  - ~~Update the link state for this node~~ (it's already done in the heartbeat echo. if update here, while the lsa pkt come early then heartbeat echo, then the node will not update the lsadb)
+  - ~~Update My_ID lsadb to connect node if the pkt node is neighbor~~
 - Step4: Flooding this lsa_pkt to all the neighbors
 - Step5: Check the map is complete
-- Step6: Update the forwarding table
+- Step6: ~~Update the forwarding table~~ Recompute the forwarding table
 
 #### Init LSA Step
 

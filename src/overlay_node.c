@@ -204,7 +204,7 @@ static void flooding(void)
     pkt.hdr.dst_id = 0; // broadcast, set later
     pkt.origin = My_ID;
     pkt.ttl = INITIAL_TTL;
-    pkt.seq = seq++;
+    pkt.seq = ++seq;
 
     //// STEP 3: get the node link
     //// STEP 4: set the packet link
@@ -224,6 +224,33 @@ static void flooding(void)
     lsadb[My_ID].n_links = pkt.n_links;
     memcpy(lsadb[My_ID].links, pkt.links, sizeof(pkt.links));
 
+    // debug: print the pkt
+    printf("[Packet Info]\n");
+    printf("pkt.hdr.type = %u\n", pkt.hdr.type);
+    printf("pkt.hdr.src_id = %u\n", pkt.hdr.src_id);
+    printf("pkt.hdr.dst_id = %u\n", pkt.hdr.dst_id);
+    printf("pkt.origin = %u\n", pkt.origin);
+    printf("pkt.ttl = %u\n", pkt.ttl);
+    printf("pkt.seq = %u\n", pkt.seq);
+    printf("pkt.n_links = %u\n", pkt.n_links);
+    for (int i = 0; i < pkt.n_links; i++) {
+        printf("pkt.links[%d].link_id = %u\n", i, pkt.links[i].link_id);
+        printf("pkt.links[%d].link_cost = %u\n", i, pkt.links[i].link_cost);
+    }
+
+    // debug: print the lsadb
+    printf("[LSA DB]\n");
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        printf("lsadb[%d].received = %u\n", i, lsadb[i].received);
+        printf("lsadb[%d].seq = %u\n", i, lsadb[i].seq);
+        printf("lsadb[%d].n_links = %u\n", i, lsadb[i].n_links);
+        for (int j = 0; j < lsadb[i].n_links; j++) {
+            printf("lsadb[%d].links[%d].link_id = %u\n", i, j, lsadb[i].links[j].link_id);
+            printf("lsadb[%d].links[%d].link_cost = %u\n", i, j, lsadb[i].links[j].link_cost);
+        }
+    }
+    printf("\n");
+
     ///// STEP 6: send it to all neighbors
     for (int i = 0; i < link_state_list_size; i++) {
         if (link_state_list[i].alive == true) {
@@ -234,6 +261,19 @@ static void flooding(void)
             Alarm(DEBUG, "Flooding: Sent lsa to %u at first pass\n", link_state_list[i].node_id);
         }
     }
+}
+
+static void connect_flooding(void)
+{
+    Alarm(DEBUG, "CONNECT FLOODING\n");
+
+
+}
+
+static void delete_flooding(void)
+{
+    Alarm(DEBUG, "DELETE FLOODING\n");
+
 }
 
 ///////////////////////////
@@ -422,27 +462,22 @@ void heartbeat_timeout_callback(int uc, void *ud)
 
     // if lsa
     // updating the lsadb for this node
-    if (Route_Mode == MODE_LINK_STATE) {
-        // lsadb[My_ID].seq++;
-        int count = 0;
-        for (int i = 0; i < link_state_list_size; i++) {
-            if (link_state_list[i].alive == true) {
-                lsadb[My_ID].links[count].link_id = link_state_list[i].node_id;
-                lsadb[My_ID].links[count].link_cost = link_state_list[i].link_cost;
-                count++;
-            }
-        }
-        if (count != lsadb[My_ID].n_links - 1) {
-            Alarm(PRINT, "Warning: Link state count mismatch, expected %u, got %u\n",
-                  lsadb[My_ID].n_links - 1, count);
-        }
-        lsadb[My_ID].n_links = count;
-    }
-
-
-    // Broadcast the link state update
-    Alarm(DEBUG, "Link %u is dead -- Flooding to all\n", link->node_id);
-    flooding();
+    // if (Route_Mode == MODE_LINK_STATE) {
+    //     // lsadb[My_ID].seq++;
+    //     int count = 0;
+    //     for (int i = 0; i < link_state_list_size; i++) {
+    //         if (link_state_list[i].alive == true) {
+    //             lsadb[My_ID].links[count].link_id = link_state_list[i].node_id;
+    //             lsadb[My_ID].links[count].link_cost = link_state_list[i].link_cost;
+    //             count++;
+    //         }
+    //     }
+    //     if (count != lsadb[My_ID].n_links - 1) {
+    //         Alarm(PRINT, "Warning: Link state count mismatch, expected %u, got %u\n",
+    //               lsadb[My_ID].n_links - 1, count);
+    //     }
+    //     lsadb[My_ID].n_links = count;
+    // }
 
     // if lsa
     // Delete the dead node
@@ -450,7 +485,14 @@ void heartbeat_timeout_callback(int uc, void *ud)
         // lsadb[link->node_id].seq++;
         memset(lsadb[link->node_id].links, 0, sizeof(lsadb[link->node_id].links));
         lsadb[link->node_id].n_links = 0;
+        lsadb[link->node_id].seq = 0;
     }
+
+    // Broadcast the link state update
+    Alarm(DEBUG, "Link %u is dead -- Flooding to all\n", link->node_id);
+    flooding();
+
+    recompute_route();
 
 }
 
@@ -479,6 +521,13 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
                 // Broadcast the link state update
                 link_state_list[i].alive = true;
                 Alarm(DEBUG, "Link %u is alive -- Broadcast to all\n", id);
+                
+                //
+                // update the lsadb for this node
+                // lsadb[link_state_list[i].node_id].
+                flooding();
+                // update the lsadb for this node
+                recompute_route();
             }
             // reset the timeout timer
             if (link_state_list[i].timeout_id != -1) {
@@ -509,7 +558,8 @@ void handle_lsa(struct lsa_pkt *pkt)
         Alarm(PRINT, "Error: LSA msg but not in link state routing mode\n");
     }
 
-    Alarm(DEBUG, "Got lsa from %d\n", pkt->hdr.src_id);
+    Alarm(DEBUG, "Handle LSA\n");
+    Alarm(DEBUG, "Got lsa from %d in origin %u\n", pkt->hdr.src_id, pkt->origin);
 
      /* Students fill in! */
 
@@ -529,15 +579,38 @@ void handle_lsa(struct lsa_pkt *pkt)
     memcpy(lsadb[pkt->origin].links, pkt->links, sizeof(pkt->links));
 
     // make id alive
-    if (pkt->origin == pkt->hdr.src_id) { // Send from neighber
-        for (int i = 0; i < link_state_list_size; i++) {
-            if (link_state_list[i].node_id == pkt->origin) {
-                link_state_list[i].alive = true;
-                Alarm(DEBUG, "LSA: Link %u is alive\n", pkt->origin);
-                break;
-            }
+    // if (pkt->origin == pkt->hdr.src_id) { // Send from neighber
+    //     // printf("LSA: it send from neighbor\n");
+    //     for (int i = 0; i < link_state_list_size; i++) {
+    //         if (link_state_list[i].node_id == pkt->origin) {
+    //             link_state_list[i].alive = true;
+    //             Alarm(DEBUG, "LSA: Link %u is alive\n", pkt->origin);
+    //             break;
+    //         }
+    //     }
+    // }
+    // else {
+    //     // printf("LSA: it send from other node\n");
+    // }
+
+    // print the lsadb
+    printf("[Handle][LSA DB]\n");
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        printf("lsadb[%d].received = %u\n", i, lsadb[i].received);
+        printf("lsadb[%d].seq = %u\n", i, lsadb[i].seq);
+        printf("lsadb[%d].n_links = %u\n", i, lsadb[i].n_links);
+        for (int j = 0; j < lsadb[i].n_links; j++) {
+            printf("lsadb[%d].links[%d].link_id = %u\n", i, j, lsadb[i].links[j].link_id);
+            printf("lsadb[%d].links[%d].link_cost = %u\n", i, j, lsadb[i].links[j].link_cost);
         }
     }
+    printf("\n");
+
+    // update My_ID
+    // if neighbor
+    // if (pkt->hdr.src_id == pkt->origin) {
+    //     lsadb[My_ID].
+    // }
 
     //// STEP 4: flooding this lsa_pkt to all neighbors
     if (--pkt->ttl > 0) {
@@ -994,6 +1067,10 @@ void init_link_state(void)
             lsadb[i].links[j].link_cost = 0;
         }
     }
+
+    // flooding
+    // flooding();
+    //useless
 
     // Set up heartbeat timer
     sp_time zero = { .sec = 0, .usec = 0 };
