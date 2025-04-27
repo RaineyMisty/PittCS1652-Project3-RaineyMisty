@@ -203,6 +203,7 @@ static void broadcast_link_state(void)
         if (Edge_List.edges[i]->src_id == My_ID) {
             pkt.link_ids[count] = Edge_List.edges[i]->dst_id;
             pkt.link_costs[count] = Edge_List.edges[i]->cost;
+            count++;
         }
     }
     pkt.num_links = count;
