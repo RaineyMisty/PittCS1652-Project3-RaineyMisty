@@ -212,9 +212,21 @@ static void broadcast_link_state(void)
 
     // fill in the link state
     uint32_t count = 0;
-    for (int i = 0; i < Edge_List.num_edges; i++) {
-        if (Edge_List.edges[i]->src_id == My_ID) {
-            pkt.link_ids[count] = Edge_List.edges[i]->dst_id;
+    // for (int i = 0; i < Edge_List.num_edges; i++) {
+    //     if (Edge_List.edges[i]->src_id == My_ID) {
+    //         pkt.link_ids[count] = Edge_List.edges[i]->dst_id;
+    //         pkt.link_costs[count] = Edge_List.edges[i]->cost;
+    //         count++;
+    //     }
+    // }
+    ////////////////////////////////
+    // only send the alive links  //
+    // that is the only way I can //
+    // use to solve this problem  //
+    ////////////////////////////////
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].alive == true) {
+            pkt.link_ids[count] = link_state_list[i].node_id;
             pkt.link_costs[count] = Edge_List.edges[i]->cost;
             count++;
         }
