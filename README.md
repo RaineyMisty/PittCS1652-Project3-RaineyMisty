@@ -101,3 +101,23 @@ I'll upload a new version tomorrow
   - the avilable data are received only when receiving the lsa packet
   - so, no flooding, no recompute
 - Step3: Set a timer to send heartbeat packet
+
+## Solving non-neighbor problem
+
+### Connecting
+
+- Problem
+  - The new node "cannot keep up" with the initial LSA flood that has already run.
+- Example
+  - 1 and 2, 3 are neighbors, 2 and 3 are not neighbors. Now I open 1, then 2, and finally 3. Now 1 and 2 have the topology of the entire graph, but 3 does not have 2's information, because 3 is not 2's neighbor, and 3 is opened after 2, and 2 is no longer flooding when it is opened.
+- Solution
+  - Perform a full synchronization when "Neighbor Up". When it is found in headle_lsa() that a neighbor's received was originally false and now becomes true, it means that there is a new node. So I sent my message to my new neighbor again.
+
+### Deleting
+
+- Problem
+  - After a node crashes, it will no longer send new LSAs, and other routers will not receive the message of its departure, so the old entries will remain in lsadb.
+- Example
+  - 1 and 2, 3 are neighbors, 2 and 3 are not neighbors. Now I open 1, then 2, and finally 3. Now 1, 2 and 3 have the topology of the entire graph. Then I close 3, and the information of node 3 is deleted in the lsadb of node 1, but the lsadb of node 2 only deletes the path from 1 to 3, but does not delete the node 3, because 3 is not a neighbor of 2, and 3 does not send flooding information when it is closed, and 2 can only obtain the information that 3 is closed through 1, but 1 does not tell 2 that 3 has been closed.
+- Solution
+  - Mark the lsa packet sent by the delete trigger. After each update of a marked lsa packet, do a DFS to kick out the nodes in the graph that cannot be reached from itself.
