@@ -190,10 +190,8 @@ static void recompute_route(void)
 // Writen by Rainey Chen //
 ///////////////////////////
 
-static void flooding(void)
+static struct lsa_pkt create_lsa_pkt(uint32_t dst_id, uint32_t u_ttl)
 {
-    Alarm(DEBUG, "FLOODING\n");
-
     //// STEP 1: create a packet
     struct lsa_pkt pkt;
 
@@ -203,7 +201,7 @@ static void flooding(void)
     pkt.hdr.src_id = My_ID;
     pkt.hdr.dst_id = 0; // broadcast, set later
     pkt.origin = My_ID;
-    pkt.ttl = INITIAL_TTL;
+    pkt.ttl = u_ttl;
     pkt.seq = ++seq;
 
     //// STEP 3: get the node link
@@ -217,6 +215,15 @@ static void flooding(void)
         }
     }
     pkt.n_links = count;
+
+    return pkt;
+}
+
+static void flooding(void)
+{
+    Alarm(DEBUG, "FLOODING\n");
+
+    struct lsa_pkt pkt = create_lsa_pkt(0, INITIAL_TTL);
 
     //// STEP 5: update local lsadb
     lsadb[My_ID].received = true;
@@ -261,19 +268,6 @@ static void flooding(void)
             Alarm(DEBUG, "Flooding: Sent lsa to %u at first pass\n", link_state_list[i].node_id);
         }
     }
-}
-
-static void connect_flooding(void)
-{
-    Alarm(DEBUG, "CONNECT FLOODING\n");
-
-
-}
-
-static void delete_flooding(void)
-{
-    Alarm(DEBUG, "DELETE FLOODING\n");
-
 }
 
 ///////////////////////////
@@ -486,6 +480,7 @@ void heartbeat_timeout_callback(int uc, void *ud)
         memset(lsadb[link->node_id].links, 0, sizeof(lsadb[link->node_id].links));
         lsadb[link->node_id].n_links = 0;
         lsadb[link->node_id].seq = 0;
+        lsadb[link->node_id].received = false;
     }
 
     // Broadcast the link state update
@@ -573,6 +568,16 @@ void handle_lsa(struct lsa_pkt *pkt)
 
     //// STEP 3: Update the LSA database (and id alive)
 
+    // supplementary sending: if haven't received before
+    if (lsadb[pkt->origin].received == false) {
+        // send My_ID's lsa pkt directly to the origin
+        struct lsa_pkt lsa_pkt = create_lsa_pkt(pkt->origin, INITIAL_TTL);
+        struct sockaddr_in addr = Node_List.nodes[pkt->origin-1]->ctrl_addr; // init with 0!
+        sendto(Ctrl_Sock, &lsa_pkt, sizeof(lsa_pkt), 0, (struct sockaddr *)&addr,
+               sizeof(addr));
+        Alarm(DEBUG, "LSA: Send the Supplementary pkt to %u\n", pkt->origin);
+    }
+
     lsadb[pkt->origin].received = true;
     lsadb[pkt->origin].seq = pkt->seq;
     lsadb[pkt->origin].n_links = pkt->n_links;
@@ -622,6 +627,7 @@ void handle_lsa(struct lsa_pkt *pkt)
                 if(link_state_list[i].node_id == pkt->origin) {
                     continue; // skip the origin
                 }
+                pkt->hdr.dst_id = link_state_list[i].node_id;
                 struct sockaddr_in addr = Node_List.nodes[link_state_list[i].node_id-1]->ctrl_addr; // init with 0!
                 sendto(Ctrl_Sock, pkt, sizeof(*pkt), 0, (struct sockaddr *)&addr,
                        sizeof(addr));
