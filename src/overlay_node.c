@@ -33,7 +33,7 @@
 #define MAX_CONF_LINE 1024
 
 #define HEARTBEAT_INTERVAL 1
-#define HEARTBEAT_TIMEOUT  3
+#define HEARTBEAT_TIMEOUT  10
 
 #define MAX_PATH 8
 #define MAX_COST 2147483647 //4294967295
@@ -313,6 +313,35 @@ void forward_data(struct data_pkt *pkt)
      * Students fill in! Do forwarding table lookup, update path information in
      * header (see deliver_locally for an example), and send packet to next hop
      * */
+    
+    uint32_t next_hop = forwarding_table[pkt->hdr.dst_id];
+    if (next_hop == -1) {
+        Alarm(PRINT, "overlay_node: Error: no next hop for destination %u\n",
+              pkt->hdr.dst_id);
+        return;
+    }
+
+    if (pkt->hdr.path_len < MAX_PATH) {
+        pkt->hdr.path[pkt->hdr.path_len++] = My_ID;
+    }
+    else {
+        Alarm(PRINT, "overlay_node: Error: path length exceeded max path\n");
+        return;
+    }
+
+    /* Send data to next hop */
+    struct sockaddr_in addr = Node_List.nodes[next_hop-1]->data_addr; // init with 0!
+    
+    int sent = sendto(Data_Sock, pkt, sizeof(struct data_pkt) - MAX_PAYLOAD_SIZE + pkt->hdr.data_len,
+                 0, (struct sockaddr *)&addr, sizeof(addr));
+
+    if (sent < 0) {
+        Alarm(PRINT, "overlay_node: Error sending data to overlay node %u: %s\n",
+              next_hop, strerror(errno));
+        return;
+    }
+    Alarm(DEBUG, "overlay_node: Sent data to overlay node %u\n", next_hop);
+
 }
 
 /* Deliver packet to one of my local clients */
