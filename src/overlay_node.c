@@ -38,6 +38,8 @@
 #define MAX_PATH 8
 #define MAX_COST 2147483647 //4294967295
 
+static bool avilable[MAX_PATH+1]; // avilable[i] = true if i is available
+
 static int graph[MAX_PATH+1][MAX_PATH+1]; // graph[i][j] = cost from i to j
 static uint32_t forwarding_table[MAX_PATH+1]; // forwarding_table[i] = next hop to reach i
 
@@ -186,6 +188,7 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
             break;
         }
     }
+    avilable[id] = true;
 
      // Just create one and send back :)
     struct heartbeat_echo_pkt echo_pkt;
@@ -235,7 +238,7 @@ static void broadcast_link_state(void)
 static void dijkstra_forwarding(void)
 {
     int n = Node_List.num_nodes;
-    int dist[MAX_PATH+1];
+    int dist[MAX_PATH+1]; // dist[i] = cost from My_ID to i
     bool visited[MAX_PATH+1] = {false};
     int next_hop[MAX_PATH+1];
 
@@ -245,6 +248,25 @@ static void dijkstra_forwarding(void)
         visited[i] = false;
         next_hop[i] = (dist[i] == MAX_COST) ? 0 : My_ID;
     }
+
+    //  set the non-alive visited to true
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].alive == false) {
+            visited[link_state_list[i].node_id] = true;
+            Alarm(DEBUG, "Dijkstra: %u is not alive\n", link_state_list[i].node_id);
+        }
+        else {
+            Alarm(DEBUG, "Dijkstra: %u is alive\n", link_state_list[i].node_id);
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        if (visited[i] == true) {
+            dist[i] = MAX_COST;
+            next_hop[i] = 0;
+        }
+    }
+
     dist[My_ID] = 0;
     visited[My_ID] = true;
     next_hop[My_ID] = My_ID;
@@ -261,6 +283,9 @@ static void dijkstra_forwarding(void)
                 u = i;
             }
         }
+
+        // print 
+        printf("dijk: in loop %d, u = %d, min_dist = %d\n", k, u, min_dist);
             
         if (u == -1) {
             break; // All remaining nodes are unreachable
@@ -278,7 +303,11 @@ static void dijkstra_forwarding(void)
                     // - Otherwise, u is not the source, and we have recorded in next_hop[u]
                     // "who is the first hop to u", so the first hop to v
                     // should follow u's first hop:
-                    if (u == My_ID) {
+
+                    // Let me think about this...
+
+                    // u is the shortest node whose path can be updated
+                    if (u != My_ID) {
                         next_hop[v] = v;
                     } else {
                         next_hop[v] = next_hop[u];
@@ -815,7 +844,7 @@ void init_link_state(void)
     for (int i = 0; i < Edge_List.num_edges; i++) {
         if (Edge_List.edges[i]->src_id == My_ID) {
             link_state_list[idx].node_id = Edge_List.edges[i]->dst_id;
-            link_state_list[idx].alive = true;
+            link_state_list[idx].alive = false;
             link_state_list[idx].timeout_id = -1;
             idx++;
         }
@@ -832,10 +861,19 @@ void init_link_state(void)
         struct edge *e = Edge_List.edges[i];
         graph[e->src_id][e->dst_id] = e->cost;
     }
+    
+    // init forwarding table
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        forwarding_table[i] = 0;
+    }
 
     // broadcast the link state
     broadcast_link_state();
     Alarm(DEBUG, "Broadcasted link state in the beginning\n");
+
+    // dijkstra
+    dijkstra_forwarding();
+    Alarm(DEBUG, "Dijkstra at the beginning\n");
 
     // Set up heartbeat timer
     sp_time zero = { .sec = 0, .usec = 0 };
