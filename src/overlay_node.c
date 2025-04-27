@@ -319,7 +319,7 @@ static void dijkstra_forwarding(void)
                     // Let me think about this...
 
                     // u is the shortest node whose path can be updated
-                    if (u != My_ID) {
+                    if (u == My_ID) {
                         next_hop[v] = v;
                     } else {
                         next_hop[v] = next_hop[u];
