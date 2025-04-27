@@ -390,8 +390,8 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
                 graph[id][My_ID] = Edge_List.edges[i]->cost;
                 Alarm(DEBUG, "Graph updated: link %u -> %u is added, cost %u\n",
                       My_ID, id, Edge_List.edges[i]->cost);
-                // dijkstra
-                dijkstra_forwarding();
+                // // dijkstra
+                // dijkstra_forwarding();
             }
             // reset the timeout timer
             if (link_state_list[i].timeout_id != -1) {
