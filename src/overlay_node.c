@@ -186,6 +186,30 @@ static void recompute_route(void)
     }
 
     // TODO: Update the forwarding table
+    // find the next hop
+    for (int dst = 1; dst <= graph.n; dst++) {
+        if (dst == My_ID) {
+            continue; // skip myself
+        }
+        if (prev[dst] == -1) {
+            forwarding_table[dst] = -1; // unreachable
+            continue;
+        }
+        int next_hop = dst;
+        while (prev[next_hop] != My_ID) {
+            next_hop = prev[next_hop];
+        }
+        forwarding_table[dst] = next_hop;
+    }
+    // print the forwarding table
+    printf("[Forwarding Table]\n");
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        if (forwarding_table[i] == -1) {
+            printf("Node %d is unreachable\n", i);
+        } else {
+            printf("Node %d's next hop is [%d]\n", i, forwarding_table[i]);
+        }
+    }
 }
 
 ///////////////////////////
