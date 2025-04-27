@@ -33,7 +33,7 @@
 #define MAX_CONF_LINE 1024
 
 #define HEARTBEAT_INTERVAL 1
-#define HEARTBEAT_TIMEOUT  10
+#define HEARTBEAT_TIMEOUT  3
 
 #define MAX_PATH 8
 #define MAX_COST 2147483647 //4294967295
@@ -176,7 +176,17 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
     // Alarm(DEBUG, "Got heartbeat from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
-     
+    
+    // make it true
+    uint32_t id = pkt->hdr.src_id;
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].node_id == id) {
+            link_state_list[i].alive = true;
+            Alarm(DEBUG, "Heartbeat: Link %u is alive\n", id);
+            break;
+        }
+    }
+
      // Just create one and send back :)
     struct heartbeat_echo_pkt echo_pkt;
     echo_pkt.hdr.type = CTRL_HEARTBEAT_ECHO;
@@ -293,6 +303,7 @@ void heartbeat_timeout_callback(int uc, void *ud)
     Alarm(DEBUG, "Link %u is dead\n", link->node_id);
 
     link->alive = false;
+    Alarm(DEBUG, "Heartbeat echo: Link %u is false\n", link->node_id);
 
     // Broadcast the link state update
     Alarm(DEBUG, "Link %u is dead -- Broadcast to all\n", link->node_id);
@@ -370,6 +381,15 @@ void handle_lsa(struct lsa_pkt *pkt)
      /* Students fill in! */
     uint32_t src_id = pkt->hdr.src_id;
 
+    // make id alive
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].node_id == src_id) {
+            link_state_list[i].alive = true;
+            Alarm(DEBUG, "LSA: Link %u is alive\n", src_id);
+            break;
+        }
+    }
+
     // update the graph
     // delete the old edges in src
     for (int v = 1; v <= Node_List.num_nodes; v++) {
@@ -414,7 +434,7 @@ void handle_overlay_ctrl(int sock, int code, void *data)
     struct ctrl_hdr * hdr = NULL;
     int bytes = 0;
 
-    Alarm(DEBUG, "overlay_node: received overlay control msg!\n");
+    // Alarm(DEBUG, "overlay_node: received overlay control msg!\n");
 
     fromlen = sizeof(recv_addr);
     bytes = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&recv_addr,
