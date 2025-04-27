@@ -40,6 +40,12 @@ struct heartbeat_echo_pkt {
     /* you may add additional fields here (if needed) */
 } __attribute__((packed));
 
+enum trigger_type {
+    NODE_NONE,
+    NODE_CONNECT,
+    NODE_DISCONNECT,
+};
+
 typedef struct {
     uint32_t link_id;
     uint32_t link_cost;
@@ -50,6 +56,7 @@ struct lsa_pkt {
     struct ctrl_hdr hdr;
     /* you should define the fields needed here */
     uint32_t origin;
+    enum trigger_type trigger;
     uint32_t ttl;
     uint32_t seq;
     uint32_t n_links; /* number of links in the packet */

@@ -63,6 +63,12 @@ struct link_state
 static struct link_state *link_state_list = NULL;
 static int link_state_list_size = 0;
 
+enum trigger_type {
+    NODE_NONE,
+    NODE_CONNECT,
+    NODE_DELETE,
+};
+
 enum mode {
     MODE_NONE,
     MODE_LINK_STATE,
@@ -190,7 +196,7 @@ static void recompute_route(void)
 // Writen by Rainey Chen //
 ///////////////////////////
 
-static struct lsa_pkt create_lsa_pkt(uint32_t dst_id, uint32_t u_ttl)
+static struct lsa_pkt create_lsa_pkt(uint32_t dst_id, uint32_t u_ttl, enum trigger_type u_trigger)
 {
     //// STEP 1: create a packet
     struct lsa_pkt pkt;
@@ -201,6 +207,7 @@ static struct lsa_pkt create_lsa_pkt(uint32_t dst_id, uint32_t u_ttl)
     pkt.hdr.src_id = My_ID;
     pkt.hdr.dst_id = 0; // broadcast, set later
     pkt.origin = My_ID;
+    pkt.trigger = u_trigger;
     pkt.ttl = u_ttl;
     pkt.seq = ++seq;
 
@@ -219,11 +226,11 @@ static struct lsa_pkt create_lsa_pkt(uint32_t dst_id, uint32_t u_ttl)
     return pkt;
 }
 
-static void flooding(void)
+static void flooding(enum trigger_type trigger)
 {
     Alarm(DEBUG, "FLOODING\n");
 
-    struct lsa_pkt pkt = create_lsa_pkt(0, INITIAL_TTL);
+    struct lsa_pkt pkt = create_lsa_pkt(0, INITIAL_TTL, trigger);
 
     //// STEP 5: update local lsadb
     lsadb[My_ID].received = true;
@@ -485,7 +492,7 @@ void heartbeat_timeout_callback(int uc, void *ud)
 
     // Broadcast the link state update
     Alarm(DEBUG, "Link %u is dead -- Flooding to all\n", link->node_id);
-    flooding();
+    flooding(NODE_DELETE);
 
     recompute_route();
 
@@ -520,7 +527,7 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
                 //
                 // update the lsadb for this node
                 // lsadb[link_state_list[i].node_id].
-                flooding();
+                flooding(NODE_CONNECT);
                 // update the lsadb for this node
                 recompute_route();
             }
@@ -571,7 +578,7 @@ void handle_lsa(struct lsa_pkt *pkt)
     // supplementary sending: if haven't received before
     if (lsadb[pkt->origin].received == false) {
         // send My_ID's lsa pkt directly to the origin
-        struct lsa_pkt lsa_pkt = create_lsa_pkt(pkt->origin, INITIAL_TTL);
+        struct lsa_pkt lsa_pkt = create_lsa_pkt(pkt->origin, 1, NODE_NONE);
         struct sockaddr_in addr = Node_List.nodes[pkt->origin-1]->ctrl_addr; // init with 0!
         sendto(Ctrl_Sock, &lsa_pkt, sizeof(lsa_pkt), 0, (struct sockaddr *)&addr,
                sizeof(addr));
