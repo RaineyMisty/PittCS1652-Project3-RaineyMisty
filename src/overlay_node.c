@@ -88,99 +88,102 @@ static int Data_Sock   = -1;
 // Writen by Rainey Chen //
 ///////////////////////////
 
-static void dijkstra_forwarding(void)
-{return;
-//     int n = Node_List.num_nodes;
-//     int dist[MAX_PATH+1]; // dist[i] = cost from My_ID to i
-//     bool visited[MAX_PATH+1] = {false};
-//     int next_hop[MAX_PATH+1];
+typedef struct {
+    int n;
+    int map[MAX_PATH+1][MAX_PATH+1];
+} Graph;
 
-//     // Initialize the distance and next hop arrays
-//     for (int i = 1; i <= n; i++) {
-//         dist[i] = graph[My_ID][i];
-//         visited[i] = false;
-//         next_hop[i] = (dist[i] == MAX_COST) ? 0 : My_ID;
-//     }
+static void dijkstra(Graph graph, int my_id, int* dist, int* prev)
+{
+    bool visited[MAX_PATH+1] = {false};
 
-//     //  set the non-alive visited to true
-//     for (int i = 0; i < link_state_list_size; i++) {
-//         if (link_state_list[i].alive == false) {
-//             visited[link_state_list[i].node_id] = true;
-//             Alarm(DEBUG, "Dijkstra: %u is not alive\n", link_state_list[i].node_id);
-//         }
-//         else {
-//             Alarm(DEBUG, "Dijkstra: %u is alive\n", link_state_list[i].node_id);
-//         }
-//     }
+    // Initialize the distance and prev arrays
+    for (int i = 1; i <= graph.n; i++) {
+        dist[i] = graph.map[my_id][i];
+        visited[i] = false;
+        prev[i] = (dist[i] == MAX_COST) ? -1 : my_id;
+    }
+    dist[my_id] = 0;
+    visited[my_id] = true;
+    prev[my_id] = my_id;
 
-//     for (int i = 1; i <= n; i++) {
-//         if (visited[i] == true) {
-//             dist[i] = MAX_COST;
-//             next_hop[i] = 0;
-//         }
-//     }
+    // Dijkstra's algorithm
+    for (int k = 1; k < graph.n; k++) {
+        int min_dist = MAX_COST;
+        int u = -1;
 
-//     dist[My_ID] = 0;
-//     visited[My_ID] = true;
-//     next_hop[My_ID] = My_ID;
+        // Find the unvisited node with the smallest distance
+        for (int i = 1; i <= graph.n; i++) {
+            if (!visited[i] && dist[i] < min_dist) {
+                min_dist = dist[i];
+                u = i;
+            }
+        }
 
-//     // Dijkstra's algorithm
-//     for (int k = 1; k < n; k++) {
-//         int min_dist = MAX_COST;
-//         int u = -1;
-
-//         // Find the unvisited node with the smallest distance
-//         for (int i = 1; i <= n; i++) {
-//             if (!visited[i] && dist[i] < min_dist) {
-//                 min_dist = dist[i];
-//                 u = i;
-//             }
-//         }
-
-//         // print 
-//         printf("dijk: in loop %d, u = %d, min_dist = %d\n", k, u, min_dist);
-            
-//         if (u == -1) {
-//             break; // All remaining nodes are unreachable
-//         }
-//         visited[u] = true;
-//         for (int v = 1; v <= n; v++) {
-//             if (!visited[v] && graph[u][v] != MAX_COST) {
-//                 int new_dist = dist[u] + graph[u][v];
-//                 if (new_dist < dist[v]) {
-//                     dist[v] = new_dist;
-//                     // next_hop[v] = u;
-//                     // Here we determine next_hop[v]:
-//                     // - If u is the source (My_ID), it means v is our direct neighbor,
-//                     // then the first hop is v itself;
-//                     // - Otherwise, u is not the source, and we have recorded in next_hop[u]
-//                     // "who is the first hop to u", so the first hop to v
-//                     // should follow u's first hop:
-
-//                     // Let me think about this...
-
-//                     // u is the shortest node whose path can be updated
-//                     if (u == My_ID) {
-//                         next_hop[v] = v;
-//                     } else {
-//                         next_hop[v] = next_hop[u];
-//                     }
-//                 }
-//             }
-//         }
-//     }
-//     // Update the forwarding table
-//     for (int i = 1; i <= n; i++) {
-//         forwarding_table[i] = next_hop[i];
-//         Alarm(DEBUG, "forwarding_table[%d] = %d in dist = %d\n", i, forwarding_table[i], dist[i]);
-//     }
+        if (u == -1) {
+            break; // All remaining nodes are unreachable
+        }
+        visited[u] = true;
+        for (int v = 1; v <= graph.n; v++) {
+            if (!visited[v] && graph.map[u][v] != MAX_COST) {
+                int new_dist = dist[u] + graph.map[u][v];
+                if (new_dist < dist[v]) {
+                    dist[v] = new_dist;
+                    prev[v] = u;
+                }
+            }
+        }
+    }
 }
 
 static void recompute_route(void)
 {
     Alarm(DEBUG, "Recompute Route\n");
 
+    // translate into graph
+    Graph graph;
+    graph.n = Node_List.num_nodes;
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        for (int j = 1; j <= Node_List.num_nodes; j++) {
+            graph.map[i][j] = MAX_COST;
+        }
+        graph.map[i][i] = 0;
+    }
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        for (int j = 0; j < lsadb[i].n_links; j++) {
+            graph.map[i][lsadb[i].links[j].link_id] = lsadb[i].links[j].link_cost;
+        }
+    }
+
+    // print the graph
+    printf("[Graph]\n");
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        for (int j = 1; j <= Node_List.num_nodes; j++) {
+            if (graph.map[i][j] == MAX_COST) {
+                printf("X ");
+            } else {
+                printf("%d ", graph.map[i][j]);
+            }
+        }
+        printf("\n");
+    }
+
     // TODO: Dijkstra
+    int dist[MAX_PATH+1];
+    int prev[MAX_PATH+1];
+    dijkstra(graph, My_ID, dist, prev);
+
+    // print dijkstra result
+    printf("[Dijkstra]\n");
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        printf("Node %d has the cost ",  i);
+        if (dist[i] == MAX_COST) {
+            printf("X ");
+        } else {
+            printf("%d ", dist[i]);
+        }
+        printf("and the prev is [%d]\n", prev[i]);
+    }
 
     // TODO: Update the forwarding table
 }
@@ -396,50 +399,6 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
     struct sockaddr_in addr = Node_List.nodes[pkt->hdr.src_id-1]->ctrl_addr; // init with 0!
     sendto(Ctrl_Sock, &echo_pkt, sizeof(echo_pkt), 0, (struct sockaddr *)&addr,
            sizeof(addr)); // fine :D
-}
-
-/* Broadcast function to tell all others node about the link state
- * Writen by Rainey Chen */
-static void broadcast_link_state(void)
-{return;
-    // // create a lsa packet
-    // struct lsa_pkt pkt;
-    // pkt.hdr.type = CTRL_LSA;
-    // pkt.hdr.src_id = My_ID;
-
-    // // fill in the link state
-    // uint32_t count = 0;
-    // // for (int i = 0; i < Edge_List.num_edges; i++) {
-    // //     if (Edge_List.edges[i]->src_id == My_ID) {
-    // //         pkt.link_ids[count] = Edge_List.edges[i]->dst_id;
-    // //         pkt.link_costs[count] = Edge_List.edges[i]->cost;
-    // //         count++;
-    // //     }
-    // // }
-    // ////////////////////////////////
-    // // only send the alive links  //
-    // // that is the only way I can //
-    // // use to solve this problem  //
-    // ////////////////////////////////
-    // for (int i = 0; i < link_state_list_size; i++) {
-    //     if (link_state_list[i].alive == true) {
-    //         pkt.link_ids[count] = link_state_list[i].node_id;
-    //         pkt.link_costs[count] = Edge_List.edges[i]->cost;
-    //         count++;
-    //     }
-    // }
-    // pkt.num_links = count;
-
-    // // send the packet to all neighbors
-
-    // for (int i = 0; i < link_state_list_size; i++) {
-    //     //dist
-    //     pkt.hdr.dst_id = link_state_list[i].node_id;
-    //     struct sockaddr_in addr = Node_List.nodes[link_state_list[i].node_id-1]->ctrl_addr; // init with 0!
-    //     sendto(Ctrl_Sock, &pkt, sizeof(pkt), 0, (struct sockaddr *)&addr,
-    //            sizeof(addr));
-    //     Alarm(DEBUG, "Sent lsa to %u\n", link_state_list[i].node_id);
-    // }
 }
 
 /* Callback function for heartbeat timeout.
