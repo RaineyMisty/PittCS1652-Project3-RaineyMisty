@@ -41,9 +41,16 @@ struct heartbeat_echo_pkt {
 } __attribute__((packed));
 
 enum trigger_type {
-    NODE_NONE,
-    NODE_CONNECT,
-    NODE_DISCONNECT,
+    NODE_NONE = -1,     // -1 NONE
+    NODE_CONNECT = 0,   // 0 CONNECT
+    NODE_PORT_1 = 1,    // 1 deleted from port 1
+    NODE_PORT_2 = 2,
+    NODE_PORT_3 = 3,
+    NODE_PORT_4 = 4,
+    NODE_PORT_5 = 5,
+    NODE_PORT_6 = 6,
+    NODE_PORT_7 = 7,
+    NODE_PORT_8 = 8,
 };
 
 typedef struct {

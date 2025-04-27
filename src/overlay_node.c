@@ -63,12 +63,6 @@ struct link_state
 static struct link_state *link_state_list = NULL;
 static int link_state_list_size = 0;
 
-enum trigger_type {
-    NODE_NONE,
-    NODE_CONNECT,
-    NODE_DELETE,
-};
-
 enum mode {
     MODE_NONE,
     MODE_LINK_STATE,
@@ -244,6 +238,7 @@ static void flooding(enum trigger_type trigger)
     printf("pkt.hdr.src_id = %u\n", pkt.hdr.src_id);
     printf("pkt.hdr.dst_id = %u\n", pkt.hdr.dst_id);
     printf("pkt.origin = %u\n", pkt.origin);
+    printf("pkt.trigger = %u\n", pkt.trigger);
     printf("pkt.ttl = %u\n", pkt.ttl);
     printf("pkt.seq = %u\n", pkt.seq);
     printf("pkt.n_links = %u\n", pkt.n_links);
@@ -492,7 +487,7 @@ void heartbeat_timeout_callback(int uc, void *ud)
 
     // Broadcast the link state update
     Alarm(DEBUG, "Link %u is dead -- Flooding to all\n", link->node_id);
-    flooding(NODE_DELETE);
+    flooding(link->node_id);
 
     recompute_route();
 
