@@ -917,13 +917,15 @@ void init_link_state(void)
         forwarding_table[i] = 0;
     }
 
-    // broadcast the link state
-    broadcast_link_state();
-    Alarm(DEBUG, "Broadcasted link state in the beginning\n");
-
-    // dijkstra
-    dijkstra_forwarding();
-    Alarm(DEBUG, "Dijkstra at the beginning\n");
+    // init lsadb
+    for (int i = 1; i <= Node_List.num_nodes; i++) {
+        lsadb[i].seq = 0;
+        lsadb[i].n_links = 0;
+        for (int j = 0; j < MAX_PATH; j++) {
+            lsadb[i].links[j].link_id = 0;
+            lsadb[i].links[j].link_cost = 0;
+        }
+    }
 
     // Set up heartbeat timer
     sp_time zero = { .sec = 0, .usec = 0 };

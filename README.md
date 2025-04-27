@@ -75,3 +75,12 @@ I'll upload a new version tomorrow
 - Step4: Flooding this lsa_pkt to all the neighbors
 - Step5: Check the map is complete
 - Step6: Update the forwarding table
+
+#### Init LSA Step
+
+- Step1: Init the link_state_list, storing all the edges of neighbors
+- Step2: Init the lsadb
+  - set all the data to 0, because there is no link
+  - the avilable data are received only when receiving the lsa packet
+  - so, no flooding, no recompute
+- Step3: Set a timer to send heartbeat packet
