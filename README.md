@@ -23,6 +23,13 @@ I'll upload a new version tomorrow
 
 > Aim: Use function flooding() and packet sent
 
+- Step 1: create a packet
+- Step 2: set the packet header, origin, ttl, seq
+- Step 3: get the node link
+- Step 4: set the packet link
+- Step 5: update local lsadb
+- Step 6: send it to all neighbors
+
 ### Forwarding process
 
 ### Heartbeat process

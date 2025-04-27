@@ -38,6 +38,8 @@
 #define MAX_PATH 8
 #define MAX_COST 2147483647 //4294967295
 
+#define INITIAL_TTL 5
+
 typedef struct {
     bool received;
     uint32_t seq;
@@ -191,6 +193,47 @@ static void recompute_route(void)
 static void flooding(void)
 {
     Alarm(DEBUG, "FLOODING\n");
+
+    //// STEP 1: create a packet
+    struct lsa_pkt pkt;
+
+    //// STEP 2: set the packet header, origin, ttl, seq
+    static uint32_t seq = 0;
+    pkt.hdr.type = CTRL_LSA;
+    pkt.hdr.src_id = My_ID;
+    pkt.hdr.dst_id = 0; // broadcast, set later
+    pkt.origin = My_ID;
+    pkt.ttl = INITIAL_TTL;
+    pkt.seq = seq++;
+
+    //// STEP 3: get the node link
+    //// STEP 4: set the packet link
+    int count = 0;
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].alive == true) {
+            pkt.links[count].link_id = link_state_list[i].node_id;
+            pkt.links[count].link_cost = link_state_list[i].link_cost;
+            count++;
+        }
+    }
+    pkt.n_links = count;
+
+    //// STEP 5: update local lsadb
+    lsadb[My_ID].received = true;
+    lsadb[My_ID].seq = pkt.seq;
+    lsadb[My_ID].n_links = pkt.n_links;
+    memcpy(lsadb[My_ID].links, pkt.links, sizeof(pkt.links));
+
+    ///// STEP 6: send it to all neighbors
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].alive == true) {
+            pkt.hdr.dst_id = link_state_list[i].node_id;
+            struct sockaddr_in addr = Node_List.nodes[link_state_list[i].node_id-1]->ctrl_addr; // init with 0!
+            sendto(Ctrl_Sock, &pkt, sizeof(pkt), 0, (struct sockaddr *)&addr,
+                   sizeof(addr));
+            Alarm(DEBUG, "Flooding: Sent lsa to %u at first pass\n", link_state_list[i].node_id);
+        }
+    }
 }
 
 ///////////////////////////
@@ -380,7 +423,7 @@ void heartbeat_timeout_callback(int uc, void *ud)
     // if lsa
     // updating the lsadb for this node
     if (Route_Mode == MODE_LINK_STATE) {
-        lsadb[My_ID].seq++;
+        // lsadb[My_ID].seq++;
         int count = 0;
         for (int i = 0; i < link_state_list_size; i++) {
             if (link_state_list[i].alive == true) {
@@ -398,13 +441,13 @@ void heartbeat_timeout_callback(int uc, void *ud)
 
 
     // Broadcast the link state update
-    Alarm(DEBUG, "Link %u is dead -- Broadcast to all\n", link->node_id);
-    broadcast_link_state();
+    Alarm(DEBUG, "Link %u is dead -- Flooding to all\n", link->node_id);
+    flooding();
 
     // if lsa
     // Delete the dead node
     if (Route_Mode == MODE_LINK_STATE) {
-        lsadb[link->node_id].seq++;
+        // lsadb[link->node_id].seq++;
         memset(lsadb[link->node_id].links, 0, sizeof(lsadb[link->node_id].links));
         lsadb[link->node_id].n_links = 0;
     }
@@ -469,31 +512,56 @@ void handle_lsa(struct lsa_pkt *pkt)
     Alarm(DEBUG, "Got lsa from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
-    uint32_t src_id = pkt->hdr.src_id;
+
+    //// STEP 1: Send back ack
+
+    //// STEP 2: Check the sequence number
+    if (pkt->seq <= lsadb[pkt->origin].seq) {
+        Alarm(DEBUG, "LSA: %u is old\n", pkt->origin);
+        return;
+    }
+
+    //// STEP 3: Update the LSA database (and id alive)
+
+    lsadb[pkt->origin].received = true;
+    lsadb[pkt->origin].seq = pkt->seq;
+    lsadb[pkt->origin].n_links = pkt->n_links;
+    memcpy(lsadb[pkt->origin].links, pkt->links, sizeof(pkt->links));
 
     // make id alive
-    for (int i = 0; i < link_state_list_size; i++) {
-        if (link_state_list[i].node_id == src_id) {
-            link_state_list[i].alive = true;
-            Alarm(DEBUG, "LSA: Link %u is alive\n", src_id);
-            break;
+    if (pkt->origin == pkt->hdr.src_id) { // Send from neighber
+        for (int i = 0; i < link_state_list_size; i++) {
+            if (link_state_list[i].node_id == pkt->origin) {
+                link_state_list[i].alive = true;
+                Alarm(DEBUG, "LSA: Link %u is alive\n", pkt->origin);
+                break;
+            }
         }
     }
 
-    // // update the graph
-    // // delete the old edges in src
-    // for (int v = 1; v <= Node_List.num_nodes; v++) {
-    //     graph[src_id][v] = MAX_COST;
-    // }
-    // // add the new edges from the pkt
-    // for (uint32_t i = 0; i < pkt->num_links; i++) {
-    //     uint32_t dst_id = pkt->link_ids[i];
-    //     uint32_t cost = pkt->link_costs[i];
-    //     graph[src_id][dst_id] = cost;
-    // }
+    //// STEP 4: flooding this lsa_pkt to all neighbors
+    if (--pkt->ttl > 0) {
+        for (int i = 0; i < link_state_list_size; i++) {
+            if (link_state_list[i].alive == true) {
+                if(link_state_list[i].node_id == pkt->hdr.src_id) {
+                    continue; // skip the sender
+                }
+                if(link_state_list[i].node_id == pkt->origin) {
+                    continue; // skip the origin
+                }
+                struct sockaddr_in addr = Node_List.nodes[link_state_list[i].node_id-1]->ctrl_addr; // init with 0!
+                sendto(Ctrl_Sock, pkt, sizeof(*pkt), 0, (struct sockaddr *)&addr,
+                       sizeof(addr));
+                Alarm(DEBUG, "LSA: Sent lsa to %u for flooding %u\n",
+                      link_state_list[i].node_id, INITIAL_TTL - pkt->ttl);
+            }
+        }
+    }
 
-    // dijk
-    dijkstra_forwarding();
+    //// STEP 5: Check the map is complete
+
+    //// STEP 6: Recompute the route
+    recompute_route();
 }
 
 /* Process received distance vector update */
