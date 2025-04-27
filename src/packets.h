@@ -40,13 +40,20 @@ struct heartbeat_echo_pkt {
     /* you may add additional fields here (if needed) */
 } __attribute__((packed));
 
+typedef struct {
+    uint32_t link_id;
+    uint32_t link_cost;
+} link_t;
+
 /* Link state advertisement */
 struct lsa_pkt {
     struct ctrl_hdr hdr;
     /* you should define the fields needed here */
-    uint32_t num_links; /* number of links in the packet */
-    uint32_t link_ids[MAX_PATH]; /* array of links */
-    uint32_t link_costs[MAX_PATH]; /* array of costs */
+    uint32_t origin;
+    uint32_t ttl;
+    uint32_t seq;
+    uint32_t n_links; /* number of links in the packet */
+    link_t links[MAX_PATH]; /* array of links */
 } __attribute__((packed));
 
 /* Distance vector update */
