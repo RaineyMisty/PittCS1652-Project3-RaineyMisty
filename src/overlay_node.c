@@ -826,6 +826,7 @@ void init_link_state(void)
         for (int v = 1; v <= Node_List.num_nodes; v++) {
             graph[u][v] = MAX_COST;
         }
+        graph[u][u] = 0; // distance to self is 0
     }
     for (int i = 0; i < Edge_List.num_edges; i++) {
         struct edge *e = Edge_List.edges[i];
