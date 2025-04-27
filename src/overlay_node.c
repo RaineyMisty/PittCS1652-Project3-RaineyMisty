@@ -36,7 +36,7 @@
 #define HEARTBEAT_TIMEOUT  10
 
 #define MAX_PATH 8
-#define MAX_COST 4294967295
+#define MAX_COST 2147483647 //4294967295
 
 static int graph[MAX_PATH+1][MAX_PATH+1]; // graph[i][j] = cost from i to j
 static uint32_t forwarding_table[MAX_PATH+1]; // forwarding_table[i] = next hop to reach i
@@ -173,7 +173,7 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
         return;
     }
 
-    Alarm(DEBUG, "Got heartbeat from %d\n", pkt->hdr.src_id);
+    // Alarm(DEBUG, "Got heartbeat from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
      
@@ -219,61 +219,8 @@ static void broadcast_link_state(void)
     }
 }
 
-/* Callback function for heartbeat timeout.
- * Writen by Tingxu Chen */
-void heartbeat_timeout_callback(int uc, void *ud)
-{
-    struct link_state *link = (struct link_state *)ud;
-    
-    Alarm(DEBUG, "Link %u is dead\n", link->node_id);
-
-    link->alive = false;
-
-    // Broadcast the link state update
-    Alarm(DEBUG, "Link %u is dead -- Broadcast to all\n", link->node_id);
-    broadcast_link_state();
-}
-
-/* Handle heartbeat echo. This indicates that the link is alive, so update our
- * link weights and send update if we previously thought this link was down.
- * Push forward timer for considering the link dead */
-void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
-{
-    if (pkt->hdr.type != CTRL_HEARTBEAT_ECHO) {
-        Alarm(PRINT, "Error: non-heartbeat_echo msg in "
-                     "handle_heartbeat_echo\n");
-        return;
-    }
-
-    Alarm(DEBUG, "Got heartbeat_echo from %d\n", pkt->hdr.src_id);
-
-     /* Students fill in! */
-
-     // get the id from the packet
-    uint32_t id = pkt->hdr.src_id;
-    // find the link state in the list
-    for (int i = 0; i < link_state_list_size; i++) {
-        if (link_state_list[i].node_id == id) {
-            // check if the link is alive
-            if (link_state_list[i].alive == false) {
-                // Broadcast the link state update
-                link_state_list[i].alive = true;
-                Alarm(DEBUG, "Link %u is alive -- Broadcast to all\n", id);
-                broadcast_link_state();
-            }
-            // reset the timeout timer
-            if (link_state_list[i].timeout_id != -1) {
-                E_detach_fd(link_state_list[i].timeout_id, 0);
-            }
-            sp_time timeout = { .sec = HEARTBEAT_TIMEOUT, .usec = 0 };
-            link_state_list[i].timeout_id =
-                E_queue(heartbeat_timeout_callback, 0, &link_state_list[i], timeout);
-            break;
-        }
-    }
-}
-
-/* Dijkstra process */
+/* Dijkstra process 
+ * Writen by TIngxu Chen*/
 static void dijkstra_forwarding(void)
 {
     int n = Node_List.num_nodes;
@@ -333,6 +280,75 @@ static void dijkstra_forwarding(void)
     for (int i = 1; i <= n; i++) {
         forwarding_table[i] = next_hop[i];
         Alarm(DEBUG, "forwarding_table[%d] = %d in dist = %d\n", i, forwarding_table[i], dist[i]);
+    }
+}
+
+/* Callback function for heartbeat timeout.
+ * Writen by Tingxu Chen */
+void heartbeat_timeout_callback(int uc, void *ud)
+{
+    struct link_state *link = (struct link_state *)ud;
+    
+    Alarm(DEBUG, "Link %u is dead\n", link->node_id);
+
+    link->alive = false;
+
+    // Broadcast the link state update
+    Alarm(DEBUG, "Link %u is dead -- Broadcast to all\n", link->node_id);
+    broadcast_link_state();
+    // update the graph
+    graph[My_ID][link->node_id] = MAX_COST;
+    graph[link->node_id][My_ID] = MAX_COST;
+    Alarm(DEBUG, "Graph updated: link %u -> %u is deleted\n", My_ID, link->node_id);
+
+    // dijkstra
+    dijkstra_forwarding();
+}
+
+/* Handle heartbeat echo. This indicates that the link is alive, so update our
+ * link weights and send update if we previously thought this link was down.
+ * Push forward timer for considering the link dead */
+void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
+{
+    if (pkt->hdr.type != CTRL_HEARTBEAT_ECHO) {
+        Alarm(PRINT, "Error: non-heartbeat_echo msg in "
+                     "handle_heartbeat_echo\n");
+        return;
+    }
+
+    // Alarm(DEBUG, "Got heartbeat_echo from %d\n", pkt->hdr.src_id);
+
+     /* Students fill in! */
+
+     // get the id from the packet
+    uint32_t id = pkt->hdr.src_id;
+    // find the link state in the list
+    for (int i = 0; i < link_state_list_size; i++) {
+        if (link_state_list[i].node_id == id) {
+            // check if the link is alive
+            if (link_state_list[i].alive == false) {
+                // Broadcast the link state update
+                link_state_list[i].alive = true;
+                Alarm(DEBUG, "Link %u is alive -- Broadcast to all\n", id);
+                broadcast_link_state();
+
+                // update the graph
+                graph[My_ID][id] = Edge_List.edges[i]->cost;
+                graph[id][My_ID] = Edge_List.edges[i]->cost;
+                Alarm(DEBUG, "Graph updated: link %u -> %u is added, cost %u\n",
+                      My_ID, id, Edge_List.edges[i]->cost);
+                // dijkstra
+                dijkstra_forwarding();
+            }
+            // reset the timeout timer
+            if (link_state_list[i].timeout_id != -1) {
+                E_detach_fd(link_state_list[i].timeout_id, 0);
+            }
+            sp_time timeout = { .sec = HEARTBEAT_TIMEOUT, .usec = 0 };
+            link_state_list[i].timeout_id =
+                E_queue(heartbeat_timeout_callback, 0, &link_state_list[i], timeout);
+            break;
+        }
     }
 }
 
@@ -744,7 +760,7 @@ void heartbeat_callback(int uc, void *ud)
         struct sockaddr_in addr = Node_List.nodes[neighbor_id-1]->ctrl_addr; // init with 0!
         sendto(Ctrl_Sock, &pkt, sizeof(pkt), 0, (struct sockaddr *)&addr,
                sizeof(addr));
-        Alarm(DEBUG, "Sent heartbeat to %u\n", neighbor_id);
+        // Alarm(DEBUG, "Sent heartbeat to %u\n", neighbor_id);
 
     }
 
