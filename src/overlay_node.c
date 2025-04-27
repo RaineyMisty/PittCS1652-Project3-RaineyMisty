@@ -38,15 +38,22 @@
 #define MAX_PATH 8
 #define MAX_COST 2147483647 //4294967295
 
-static bool avilable[MAX_PATH+1]; // avilable[i] = true if i is available
+typedef struct {
+    bool received;
+    uint32_t seq;
+    uint32_t n_links;
+    link_t links[MAX_PATH];
+} lsa_state_t;
 
-static int graph[MAX_PATH+1][MAX_PATH+1]; // graph[i][j] = cost from i to j
+static lsa_state_t lsadb[MAX_PATH+1];
+
 static uint32_t forwarding_table[MAX_PATH+1]; // forwarding_table[i] = next hop to reach i
 
 struct link_state
 {
     /* data */
     uint32_t node_id;    // ID of the neighbor node
+    uint32_t link_cost;  // cost of the link
     bool     alive;      // true if the link is alive
     int      timeout_id; // timer ID for the heartbeat timeout
 };
@@ -78,6 +85,7 @@ static int Data_Sock   = -1;
 //   Dijkstra process    //
 // Writen by Rainey Chen //
 ///////////////////////////
+
 static void dijkstra_forwarding(void)
 {
     int n = Node_List.num_nodes;
@@ -164,6 +172,15 @@ static void dijkstra_forwarding(void)
         forwarding_table[i] = next_hop[i];
         Alarm(DEBUG, "forwarding_table[%d] = %d in dist = %d\n", i, forwarding_table[i], dist[i]);
     }
+}
+
+static void recompute_route(void)
+{
+    Alarm(DEBUG, "Recompute Route\n");
+
+    // TODO: Dijkstra
+
+    // TODO: Update the forwarding table
 }
 
 ///////////////////////////
@@ -290,17 +307,6 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
     // Alarm(DEBUG, "Got heartbeat from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
-    
-    // make it true
-    uint32_t id = pkt->hdr.src_id;
-    for (int i = 0; i < link_state_list_size; i++) {
-        if (link_state_list[i].node_id == id) {
-            link_state_list[i].alive = true;
-            // Alarm(DEBUG, "Heartbeat: Link %u is alive\n", id);
-            break;
-        }
-    }
-    avilable[id] = true;
 
      // Just create one and send back :)
     struct heartbeat_echo_pkt echo_pkt;
@@ -366,18 +372,43 @@ void heartbeat_timeout_callback(int uc, void *ud)
     Alarm(DEBUG, "Link %u is dead\n", link->node_id);
 
     link->alive = false;
+    // lsadb[link->node_id].seq++;
+    // lsadb[My_ID].links[link->node_id].
+    // lsadb[My_ID].n_links--;
     Alarm(DEBUG, "Heartbeat echo: Link %u is false\n", link->node_id);
+
+    // if lsa
+    // updating the lsadb for this node
+    if (Route_Mode == MODE_LINK_STATE) {
+        lsadb[My_ID].seq++;
+        int count = 0;
+        for (int i = 0; i < link_state_list_size; i++) {
+            if (link_state_list[i].alive == true) {
+                lsadb[My_ID].links[count].link_id = link_state_list[i].node_id;
+                lsadb[My_ID].links[count].link_cost = link_state_list[i].link_cost;
+                count++;
+            }
+        }
+        if (count != lsadb[My_ID].n_links - 1) {
+            Alarm(PRINT, "Warning: Link state count mismatch, expected %u, got %u\n",
+                  lsadb[My_ID].n_links - 1, count);
+        }
+        lsadb[My_ID].n_links = count;
+    }
+
 
     // Broadcast the link state update
     Alarm(DEBUG, "Link %u is dead -- Broadcast to all\n", link->node_id);
     broadcast_link_state();
-    // update the graph
-    graph[My_ID][link->node_id] = MAX_COST;
-    graph[link->node_id][My_ID] = MAX_COST;
-    Alarm(DEBUG, "Graph updated: link %u -> %u is deleted\n", My_ID, link->node_id);
 
-    // dijkstra
-    dijkstra_forwarding();
+    // if lsa
+    // Delete the dead node
+    if (Route_Mode == MODE_LINK_STATE) {
+        lsadb[link->node_id].seq++;
+        memset(lsadb[link->node_id].links, 0, sizeof(lsadb[link->node_id].links));
+        lsadb[link->node_id].n_links = 0;
+    }
+
 }
 
 /* Handle heartbeat echo. This indicates that the link is alive, so update our
@@ -405,15 +436,6 @@ void handle_heartbeat_echo(struct heartbeat_echo_pkt *pkt)
                 // Broadcast the link state update
                 link_state_list[i].alive = true;
                 Alarm(DEBUG, "Link %u is alive -- Broadcast to all\n", id);
-                broadcast_link_state();
-
-                // update the graph
-                graph[My_ID][id] = Edge_List.edges[i]->cost;
-                graph[id][My_ID] = Edge_List.edges[i]->cost;
-                Alarm(DEBUG, "Graph updated: link %u -> %u is added, cost %u\n",
-                      My_ID, id, Edge_List.edges[i]->cost);
-                // dijkstra
-                dijkstra_forwarding();
             }
             // reset the timeout timer
             if (link_state_list[i].timeout_id != -1) {
@@ -883,22 +905,11 @@ void init_link_state(void)
     for (int i = 0; i < Edge_List.num_edges; i++) {
         if (Edge_List.edges[i]->src_id == My_ID) {
             link_state_list[idx].node_id = Edge_List.edges[i]->dst_id;
+            link_state_list[idx].link_cost = Edge_List.edges[i]->cost;
             link_state_list[idx].alive = false;
             link_state_list[idx].timeout_id = -1;
             idx++;
         }
-    }
-
-    // init graph
-    for (int u = 1; u <= Node_List.num_nodes; u++) {
-        for (int v = 1; v <= Node_List.num_nodes; v++) {
-            graph[u][v] = MAX_COST;
-        }
-        graph[u][u] = 0; // distance to self is 0
-    }
-    for (int i = 0; i < Edge_List.num_edges; i++) {
-        struct edge *e = Edge_List.edges[i];
-        graph[e->src_id][e->dst_id] = e->cost;
     }
     
     // init forwarding table
