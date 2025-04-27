@@ -182,7 +182,7 @@ void handle_heartbeat(struct heartbeat_pkt *pkt)
     for (int i = 0; i < link_state_list_size; i++) {
         if (link_state_list[i].node_id == id) {
             link_state_list[i].alive = true;
-            Alarm(DEBUG, "Heartbeat: Link %u is alive\n", id);
+            // Alarm(DEBUG, "Heartbeat: Link %u is alive\n", id);
             break;
         }
     }
@@ -831,6 +831,10 @@ void init_link_state(void)
         struct edge *e = Edge_List.edges[i];
         graph[e->src_id][e->dst_id] = e->cost;
     }
+
+    // broadcast the link state
+    broadcast_link_state();
+    Alarm(DEBUG, "Broadcasted link state in the beginning\n");
 
     // Set up heartbeat timer
     sp_time zero = { .sec = 0, .usec = 0 };
