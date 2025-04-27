@@ -580,6 +580,15 @@ void handle_lsa(struct lsa_pkt *pkt)
         Alarm(DEBUG, "LSA: Send the Supplementary pkt to %u\n", pkt->origin);
     }
 
+    // delete expired lsa packet
+    if (pkt->trigger > 0) {
+        uint32_t id = pkt->trigger;
+        memset(lsadb[id].links, 0, sizeof(lsadb[id].links));
+        lsadb[id].n_links = 0;
+        lsadb[id].seq = 0;
+        lsadb[id].received = false;
+    }
+
     lsadb[pkt->origin].received = true;
     lsadb[pkt->origin].seq = pkt->seq;
     lsadb[pkt->origin].n_links = pkt->n_links;
