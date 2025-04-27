@@ -351,6 +351,22 @@ void handle_lsa(struct lsa_pkt *pkt)
     Alarm(DEBUG, "Got lsa from %d\n", pkt->hdr.src_id);
 
      /* Students fill in! */
+    uint32_t src_id = pkt->hdr.src_id;
+
+    // update the graph
+    // delete the old edges in src
+    for (int v = 1; v <= Node_List.num_nodes; v++) {
+        graph[src_id][v] = MAX_COST;
+    }
+    // add the new edges from the pkt
+    for (uint32_t i = 0; i < pkt->num_links; i++) {
+        uint32_t dst_id = pkt->link_ids[i];
+        uint32_t cost = pkt->link_costs[i];
+        graph[src_id][dst_id] = cost;
+    }
+
+    // dijk
+    dijkstra_forwarding();
 }
 
 /* Process received distance vector update */
