@@ -19,6 +19,10 @@ I'll upload a new version tomorrow
 
 > Aim: Only need to process dijkstra
 
+- Step 1: translate into graph
+- Step 2: process dijkstra
+- Step 3: translate pred array into forwarding table
+
 ### Flooding process
 
 > Aim: Use function flooding() and packet sent
@@ -120,4 +124,4 @@ I'll upload a new version tomorrow
 - Example
   - 1 and 2, 3 are neighbors, 2 and 3 are not neighbors. Now I open 1, then 2, and finally 3. Now 1, 2 and 3 have the topology of the entire graph. Then I close 3, and the information of node 3 is deleted in the lsadb of node 1, but the lsadb of node 2 only deletes the path from 1 to 3, but does not delete the node 3, because 3 is not a neighbor of 2, and 3 does not send flooding information when it is closed, and 2 can only obtain the information that 3 is closed through 1, but 1 does not tell 2 that 3 has been closed.
 - Solution
-  - Mark the lsa packet sent by the delete trigger. After each update of a marked lsa packet, do a DFS to kick out the nodes in the graph that cannot be reached from itself.
+  - Mark the lsa packet sent by the delete trigger. ~~After each update of a marked lsa packet, do a DFS to kick out the nodes in the graph that cannot be reached from itself.~~ Use the trigger tag to directly delete the expired node.
